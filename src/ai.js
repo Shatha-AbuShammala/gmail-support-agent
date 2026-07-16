@@ -20,17 +20,27 @@ async function withRetry(fn, maxRetries = 3, delayMs = 5000) {
 }
 
 async function classifyEmail(subject, body) {
-const prompt = `Classify this email into exactly one category: Support, Sales, or Spam.
+  const prompt = `Classify this email into exactly one category: Support, Sales, Spam, or Notification.
+
+Definitions:
+- Support: A customer has a problem, question, complaint, or needs assistance.
+- Sales: A customer asks about pricing, products, services, or purchasing.
+- Spam: Unwanted, suspicious, or irrelevant messages.
+- Notification: Automated emails, Slack alerts, newsletters, announcements, internal updates, or messages that do not require a reply.
+
 Reply with ONLY the category word, nothing else.
 
 Subject: ${subject}
 Body: ${body}`;
 
-  const result = await model.generateContent(prompt);
+  const result = await withRetry(() => model.generateContent(prompt));
   const text = result.response.text().trim();
 
-  if (['Support', 'Sales', 'Spam'].includes(text)) return text;
-  return 'Support'; 
+  if (['Support', 'Sales', 'Spam', 'Notification'].includes(text)) {
+    return text;
+  }
+
+  return 'Notification';
 }
 
 async function generateReply(subject, body, senderName) {
