@@ -1,9 +1,26 @@
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({ model: 'gemini-3-flash-preview' });
+const model = genAI.getGenerativeModel({ model: process.env.GEMINI_MODEL || 'gemini-3-flash-preview' });
+// Retry helper: retries a function up to `maxRetries` times if it fails with 503
+async function withRetry(fn, maxRetries = 3, delayMs = 5000) {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      const isOverloaded = err.status === 503;
+      if (isOverloaded && attempt < maxRetries) {
+        console.log(`Model overloaded, retrying in ${delayMs / 1000}s... (attempt ${attempt})`);
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+      } else {
+        throw err; // give up after max retries, or if it's a different error
+      }
+    }
+  }
+}
+
 async function classifyEmail(subject, body) {
-  const prompt = `Classify this email into exactly one category: Support, Sales, or Spam.
+const prompt = `Classify this email into exactly one category: Support, Sales, or Spam.
 Reply with ONLY the category word, nothing else.
 
 Subject: ${subject}

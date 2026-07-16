@@ -15,26 +15,33 @@ async function processNewEmails() {
   const existingIds = new Set(existing.map(e => e.gmailId));
 
   for (const msg of messages) {
-    if (existingIds.has(msg.id)) continue; 
+    if (existingIds.has(msg.id)) continue;
 
-    const details = await getMessageDetails(msg.id);
-    const category = await classifyEmail(details.subject, details.body);
+    try {
+      const details = await getMessageDetails(msg.id);
+      await new Promise(resolve => setTimeout(resolve, 2000)); // avoid hitting rate limits
 
-    let draftCreated = false;
-    if (category === 'Support') {
-      const replyText = await generateReply(details.subject, details.body, details.from);
-      await createDraftReply(details.threadId, details.from, details.subject, replyText);
-      draftCreated = true;
+      const category = await classifyEmail(details.subject, details.body);
+
+      let draftCreated = false;
+      if (category === 'Support') {
+        const replyText = await generateReply(details.subject, details.body, details.from);
+        await createDraftReply(details.threadId, details.from, details.subject, replyText);
+        draftCreated = true;
+      }
+
+      await saveEmail({
+        ...details,
+        category,
+        status: draftCreated ? 'draft_created' : 'no_action',
+        processedAt: new Date().toISOString(),
+      });
+
+      console.log(`Processed: "${details.subject}" → ${category}`);
+    } catch (err) {
+      // one failed email should not stop the rest from being processed
+      console.error(`Failed to process email ${msg.id}:`, err.message);
     }
-
-    await saveEmail({
-      ...details,
-      category,
-      status: draftCreated ? 'draft_created' : 'no_action',
-      processedAt: new Date().toISOString(),
-    });
-
-    console.log(`Processed: "${details.subject}" → ${category}`);
   }
 }
 
